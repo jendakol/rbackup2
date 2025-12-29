@@ -1,10 +1,11 @@
 mod config;
+mod db;
 mod error;
 
 use clap::Parser;
-use config::LocalConfig;
+use config::{load_config_from_db, LocalConfig};
 use std::path::PathBuf;
-use tracing::info;
+use tracing::{debug, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 #[derive(Parser, Debug)]
@@ -15,16 +16,17 @@ struct Args {
     config: PathBuf,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
 
-    if let Err(e) = run(args) {
+    if let Err(e) = run(args).await {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
 }
 
-fn run(args: Args) -> error::Result<()> {
+async fn run(args: Args) -> error::Result<()> {
     let config = LocalConfig::from_file(&args.config)?;
 
     setup_logging(&config)?;
@@ -53,8 +55,55 @@ fn run(args: Args) -> error::Result<()> {
     }
     info!("========================================");
 
-    info!("Configuration loaded successfully");
-    info!("Phase 1 complete - project foundation ready");
+    info!("Connecting to database...");
+    let database_url = config.database_url();
+    let pool = db::create_pool(database_url).await?;
+    debug!("Database connection established");
+
+    info!("Running database migrations...");
+    db::run_migrations(&pool).await?;
+    debug!("Database migrations completed");
+
+    info!("Registering device...");
+    let platform = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        "unknown"
+    };
+
+    let hostname = hostname::get().ok().and_then(|h| h.into_string().ok());
+
+    let device = db::upsert_device(
+        &pool,
+        config.device.id.clone(),
+        config.device.id.clone(),
+        platform.to_string(),
+        hostname.clone(),
+    )
+    .await?;
+    debug!("Device registered: {} ({})", device.name, device.platform);
+
+    info!("Loading remote configuration from database...");
+    let remote_config = load_config_from_db(&pool, config.device.id.clone()).await?;
+    debug!("Loaded {} backup jobs", remote_config.jobs.len());
+    debug!("Loaded {} schedules", remote_config.schedules.len());
+    debug!("Loaded {} settings", remote_config.settings.len());
+
+    let repo_url = remote_config
+        .repository_url()
+        .filter(|url| !url.is_empty())
+        .ok_or_else(|| {
+            error::ConfigError::ValidationFailed(
+                "Repository URL is not configured in database settings".to_string(),
+            )
+        })?;
+    debug!("Repository URL: {}", repo_url);
+
+    info!("========================================");
+    info!("Phase 2 complete - database layer ready");
+    info!("========================================");
 
     Ok(())
 }

@@ -1,0 +1,44 @@
+# rbackup2 Configuration File
+# This is the local bootstrap configuration for the backup client.
+# All backup jobs, schedules, and repository settings are stored in PostgreSQL.
+
+# Device Configuration
+device:
+  # Unique identifier for this device (must match the device ID in the database)
+  id: "workstation-001"
+
+# Database Configuration
+database:
+  # PostgreSQL server hostname or IP address
+  host: "db.example.com"
+  
+  # PostgreSQL server port (default: 5432)
+  port: 5432
+  
+  # Database user (also used as database name)
+  user: "backup_client"
+  
+  # Database password
+  password: "secret"
+  
+  # SSL mode: disable, allow, prefer, require, verify-ca, verify-full
+  # Default: require
+  ssl_mode: "require"
+
+# Client Configuration
+client:
+  # HTTP server bind address for the web UI and API
+  # Default: 127.0.0.1:1201
+  http_bind: "127.0.0.1:1201"
+  
+  # Log file path (directory must exist)
+  # Logs are rotated daily by default
+  log_file: "/var/log/rbackup2.log"
+
+# Metrics Configuration (optional)
+metrics:
+  # Enable metrics reporting
+  enabled: true
+  
+  # Prometheus Pushgateway URL (optional, only used if enabled is true)
+  prometheus_pushgateway: "http://prom-push.example.com:9091"

@@ -1,2 +1,6 @@
 .idea
 /target
+config.yaml
+.junie
+CLAUDE.md
+rbackup2.log*
