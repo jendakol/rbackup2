@@ -29,9 +29,10 @@ pub enum DatabaseError {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub enum BackupError {
-    ResticNotFound,
+    ResticNotFound(String),
     ExecutionFailed(String),
     OutputParseFailed(String),
+    ConfigurationError(String),
 }
 
 #[derive(Debug)]
@@ -87,10 +88,13 @@ impl fmt::Display for DatabaseError {
 impl fmt::Display for BackupError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BackupError::ResticNotFound => write!(f, "restic binary not found"),
+            BackupError::ResticNotFound(msg) => write!(f, "restic binary not found: {}", msg),
             BackupError::ExecutionFailed(msg) => write!(f, "Backup execution failed: {}", msg),
             BackupError::OutputParseFailed(msg) => {
                 write!(f, "Failed to parse backup output: {}", msg)
+            }
+            BackupError::ConfigurationError(msg) => {
+                write!(f, "Backup configuration error: {}", msg)
             }
         }
     }

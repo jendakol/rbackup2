@@ -1,3 +1,4 @@
+mod backup;
 mod config;
 mod db;
 mod error;
@@ -7,6 +8,7 @@ use config::{load_config_from_db, LocalConfig};
 use std::path::PathBuf;
 use tracing::{debug, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+use uuid::Uuid;
 
 #[derive(Parser, Debug)]
 #[command(name = "rbackup2")]
@@ -14,6 +16,9 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 struct Args {
     #[arg(short, long, value_name = "FILE")]
     config: PathBuf,
+
+    #[arg(long, value_name = "JOB_ID")]
+    test_backup: Option<Uuid>,
 }
 
 #[tokio::main]
@@ -101,8 +106,60 @@ async fn run(args: Args) -> error::Result<()> {
         })?;
     debug!("Repository URL: {}", repo_url);
 
+    if let Some(job_id) = args.test_backup {
+        info!("========================================");
+        info!("Test Backup Mode");
+        info!("========================================");
+
+        let job = db::get_job_by_id(&pool, job_id).await?.ok_or_else(|| {
+            error::AppError::Backup(error::BackupError::ConfigurationError(format!(
+                "Job with ID {} not found",
+                job_id
+            )))
+        })?;
+
+        info!("Job: {} ({})", job.name, job.id);
+        info!("Source paths: {:?}", job.source_paths);
+
+        let trace_id = uuid::Uuid::new_v4().to_string();
+
+        match backup::execute_backup(&job, &remote_config, &pool, trace_id).await {
+            Ok(run_id) => {
+                info!("Backup completed successfully");
+                info!("Run ID: {}", run_id);
+
+                let run = db::get_recent_runs(&pool, job.device_id, 1)
+                    .await?
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| error::DatabaseError::QueryFailed(sqlx::Error::RowNotFound))?;
+
+                info!("========================================");
+                info!("Backup Results");
+                info!("========================================");
+                info!("Status: {}", run.status);
+                info!("Duration: {} seconds", run.duration_seconds.unwrap_or(0));
+                info!("Files new: {}", run.files_new.unwrap_or(0));
+                info!("Files changed: {}", run.files_changed.unwrap_or(0));
+                info!("Files unmodified: {}", run.files_unmodified.unwrap_or(0));
+                info!(
+                    "Data added: {} MB",
+                    run.data_added_bytes.unwrap_or(0) / 1024 / 1024
+                );
+                info!("Snapshot ID: {}", run.snapshot_id.unwrap_or_default());
+                info!("========================================");
+
+                return Ok(());
+            }
+            Err(e) => {
+                eprintln!("Backup failed: {}", e);
+                return Err(e);
+            }
+        }
+    }
+
     info!("========================================");
-    info!("Phase 2 complete - database layer ready");
+    info!("Phase 3 complete - backup executor ready");
     info!("========================================");
 
     Ok(())
