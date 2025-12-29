@@ -4,3 +4,7 @@ config.yaml
 .junie
 CLAUDE.md
 rbackup2.log*
+
+# Test symlinks (created automatically by tests)
+/testdata/restic/restic
+/testdata/restic/restic.exe

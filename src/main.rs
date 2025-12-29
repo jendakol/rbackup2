@@ -2,11 +2,16 @@ mod backup;
 mod config;
 mod db;
 mod error;
+mod scheduler;
 
 use clap::Parser;
 use config::{load_config_from_db, LocalConfig};
+use scheduler::executor::JobExecutor;
+use scheduler::Scheduler;
 use std::path::PathBuf;
-use tracing::{debug, info};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tracing::{debug, error, info};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 use uuid::Uuid;
 
@@ -159,9 +164,60 @@ async fn run(args: Args) -> error::Result<()> {
     }
 
     info!("========================================");
-    info!("Phase 3 complete - backup executor ready");
+    info!("Starting scheduler and job executor");
     info!("========================================");
 
+    let pool_arc = Arc::new(pool);
+    let config_arc = Arc::new(Mutex::new(remote_config));
+
+    let max_concurrent = config_arc
+        .lock()
+        .await
+        .get_setting("max_concurrent_backups")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1);
+
+    let (scheduler, job_queue_rx) = Scheduler::new(
+        pool_arc.clone(),
+        config_arc.clone(),
+        config.device.id.clone(),
+    );
+    let scheduler_arc = Arc::new(scheduler);
+
+    let executor = Arc::new(JobExecutor::new(pool_arc, config_arc, max_concurrent));
+
+    let scheduler_handle = {
+        let scheduler = scheduler_arc.clone();
+        tokio::spawn(async move {
+            if let Err(e) = scheduler.start().await {
+                error!("Scheduler error: {}", e);
+            }
+        })
+    };
+
+    let executor_handle = tokio::spawn(async move {
+        if let Err(e) = executor.start(job_queue_rx).await {
+            error!("Executor error: {}", e);
+        }
+    });
+
+    info!("========================================");
+    info!("Phase 4 complete - scheduler running");
+    info!("========================================");
+
+    tokio::select! {
+        _ = scheduler_handle => {
+            info!("Scheduler task completed");
+        }
+        _ = executor_handle => {
+            info!("Executor task completed");
+        }
+        _ = tokio::signal::ctrl_c() => {
+            info!("Received shutdown signal");
+        }
+    }
+
+    info!("Shutting down...");
     Ok(())
 }
 

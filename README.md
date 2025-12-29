@@ -119,16 +119,15 @@ Comprehensive documentation is available in the `doc/` directory:
 
 ## Project Status
 
-**Current Phase**: Phase 1 Complete (Project Foundation & Configuration)
+**Current Phase**: Phase 4 Complete (Scheduler)
 
-- ✅ Project compiles
-- ✅ Local YAML config loading
-- ✅ Logging to file
-- ✅ Error handling framework
-- 🚧 Database layer (Phase 2 - in progress)
-- ⏳ Backup executor (Phase 3)
-- ⏳ Scheduler (Phase 4)
-- ⏳ HTTP API & Web UI (Phase 5)
+- ✅ Phase 1: Project Foundation & Configuration
+- ✅ Phase 2: Database Layer
+- ✅ Phase 3: Backup Executor (restic Integration)
+- ✅ Phase 4: Scheduler
+- ⏳ Phase 5: HTTP API & Web UI
+- ⏳ Phase 6: Configuration Reload & Periodic Sync
+- ⏳ Phase 7: Metrics & Polish
 
 See `doc/02-implementation-phases.md` for the complete implementation plan.
 
@@ -142,7 +141,26 @@ See `doc/02-implementation-phases.md` for the complete implementation plan.
 - **Logging**: tracing + tracing-subscriber
 - **Scheduling**: cron expressions + intervals
 
-## Building for Production
+## Development
+
+### Running Tests
+
+The project includes comprehensive unit and integration tests:
+
+```bash
+# Run all tests
+cargo test
+
+# Run only unit tests
+cargo test --lib
+
+# Run only integration tests
+cargo test --test '*'
+```
+
+The repository includes platform-specific restic binaries (`testdata/restic/restic-linux` and `testdata/restic/restic-windows.exe`) used for integration testing. These binaries are automatically used by the test suite and do not need to be installed separately for testing purposes. The test suite automatically detects the platform and uses the appropriate binary.
+
+### Building for Production
 
 ```bash
 # Linux
